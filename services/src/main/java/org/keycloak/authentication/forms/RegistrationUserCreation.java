@@ -18,6 +18,7 @@
 package org.keycloak.authentication.forms;
 
 import jakarta.ws.rs.core.MultivaluedHashMap;
+import org.jboss.logging.Logger;
 import org.keycloak.Config;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.AuthenticationFlowException;
@@ -31,12 +32,7 @@ import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
 import org.keycloak.events.EventType;
 import org.keycloak.forms.login.LoginFormsProvider;
-import org.keycloak.models.AuthenticationExecutionModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.KeycloakSessionFactory;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.RequiredActionProviderModel;
-import org.keycloak.models.UserModel;
+import org.keycloak.models.*;
 import org.keycloak.models.utils.FormMessage;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.provider.ProviderConfigProperty;
@@ -56,6 +52,7 @@ import java.util.List;
  * @version $Revision: 1 $
  */
 public class RegistrationUserCreation implements FormAction, FormActionFactory {
+    private static final Logger logger = Logger.getLogger(RegistrationUserCreation.class);
 
     public static final String PROVIDER_ID = "registration-user-creation";
 
@@ -153,6 +150,21 @@ public class RegistrationUserCreation implements FormAction, FormActionFactory {
 
         context.setUser(user);
 
+        // Grant default roles for email matching
+        String clientID = context.getAuthenticationSession().getClient().getClientId();
+        ClientModel client = context.getRealm().getClientByClientId(clientID);
+        RoleModel defaultRoles = client.getRolesStream().filter(r -> r.getName().equals("default-roles") && r.isComposite()).findFirst().orElse(null);
+        if (defaultRoles != null) {
+            String attribute = defaultRoles.getFirstAttribute("for-email"); // .*@gm\.uit\.edu\.vn$
+            if (attribute != null && !attribute.isEmpty() && email.matches(attribute)) {
+                logger.info("Email " + email + " has " + (email.matches(attribute) ? "" : "not") + " been matched with: " + attribute);
+                List<RoleModel> defaultRolesList = defaultRoles.getCompositesStream().toList();
+                for (RoleModel defaultRole : defaultRolesList) {
+                    user.grantRole(defaultRole);
+                }
+            }
+        }
+
         context.getAuthenticationSession().setClientNote(OIDCLoginProtocol.LOGIN_HINT_PARAM, username);
 
         context.getEvent().user(user);
@@ -216,7 +228,7 @@ public class RegistrationUserCreation implements FormAction, FormActionFactory {
         return false;
     }
 
-    private static AuthenticationExecutionModel.Requirement[] REQUIREMENT_CHOICES = {
+    private static final AuthenticationExecutionModel.Requirement[] REQUIREMENT_CHOICES = {
             AuthenticationExecutionModel.Requirement.REQUIRED,
             AuthenticationExecutionModel.Requirement.DISABLED
     };
