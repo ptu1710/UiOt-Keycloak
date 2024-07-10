@@ -19,8 +19,10 @@ RUN chmod -R g+rwX /opt/keycloak
 ADD ubi-null.sh /tmp/
 RUN bash /tmp/ubi-null.sh java-17-openjdk-headless glibc-langpack-en findutils
 
-FROM registry.access.redhat.com/ubi9-micro
+FROM registry.access.redhat.com/ubi9
 ENV LANG en_US.UTF-8
+
+RUN dnf install -y curl-minimal
 
 COPY libs/keycloak-metrics-spi-5.0.0.jar /opt/keycloak/providers/keycloak-metrics-spi-5.0.0.jar
 ADD libs/openremote-theme.jar /opt/keycloak/providers
